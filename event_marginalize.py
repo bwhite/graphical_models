@@ -61,8 +61,7 @@ class FactorGraph(object):
         return p
 
     def marginalize(self):
-        msg_probs = {}
-        factor_msgs, var_msgs = collections.defaultdict(list), collections.defaultdict(set)
+        factor_msgs, var_msgs = collections.defaultdict(dict), collections.defaultdict(dict)
         # Parent is the first neighbor a node sends to
         factor_parent, var_parent = collections.defaultdict(lambda : None), collections.defaultdict(lambda : None)
         active_vars = set(self.variable_to_factors.keys())
@@ -72,23 +71,26 @@ class FactorGraph(object):
 
         def msg_factor(from_var, to_factor):
             print('MSG Factor[%s, %s]' % (from_var, to_factor))
-            try:
-                prob = msg_probs[from_var]
+            prob = 1.
+            for factor_ind in set(var_msgs[from_var].keys()) - set([to_factor]):
+                prob *= var_msgs[from_var][factor_ind]
+            if isinstance(prob, float):
+                potential = lambda **kw: prob
+            else:
                 potential = lambda **kw: prob[kw.get(from_var, Ellipsis)]
-            except KeyError:
-                potential = lambda **kw: 1.
-            factor_msgs[to_factor].append(((from_var,), potential))
+            factor_msgs[to_factor][from_var] = potential
 
         def msg_variable(from_factor, to_var):
             print('MSG Variable[%s, %s]' % (from_factor, to_var))
-            variables = [self.factors[from_factor]] + factor_msgs[from_factor]
+            variables = [self.factors[from_factor]]
+            for var_name in set(factor_msgs[from_factor].keys()) - set([to_var]):
+                variables.append(((var_name,), factor_msgs[from_factor][var_name]))
             unique_vars = set()
             for var_names, _ in variables:
                 unique_vars.update(var_names)
             unique_vars.discard(to_var)
             unique_vars = list(unique_vars)
             out = 0.
-            var_msgs[to_var].add(from_factor)
 
             for config in itertools.product(*[self.variable_states[x] for x in unique_vars]):
                 config = dict(zip(unique_vars, config))
@@ -96,16 +98,13 @@ class FactorGraph(object):
                 for _, v in variables:
                     prod *= v(**config)
                 out += prod
-            try:
-                msg_probs[to_var] *= out
-            except KeyError:
-                msg_probs[to_var] = out
+            var_msgs[to_var][from_factor] = out
         while active_vars - inactive_vars or active_factors - inactive_factors:
             # Sent from variables to factors
             for var_name in active_vars - inactive_vars:
                 factors = self.variable_to_factors[var_name]
                 if len(factors) - len(var_msgs[var_name]) == 1 and var_name not in var_parent:
-                    var_parent[var_name] = list(set(factors) - var_msgs[var_name])[0]
+                    var_parent[var_name] = list(set(factors) - set(var_msgs[var_name]))[0]
                     msg_factor(var_name, var_parent[var_name])
                 elif len(factors) == len(var_msgs[var_name]):
                     for factor in set(factors) - set([var_parent.get(var_name, None)]):
@@ -121,7 +120,12 @@ class FactorGraph(object):
                     for variable in set(var_names) - set([factor_parent[factor_ind]]):
                         msg_variable(factor_ind, variable)
                     inactive_factors.add(factor_ind)
-        msg_probs = dict([(x, y / np.sum(y)) for x, y in msg_probs.items()])
+        msg_probs = {}
+        for var_name in var_msgs:
+            prob = 1.
+            for x in var_msgs[var_name].values():
+                prob *= x
+            msg_probs[var_name] = prob / np.sum(prob)
         return msg_probs
                 
 
@@ -162,7 +166,6 @@ def test_symmetric():
     out = fg.marginalize()
     np.testing.assert_equal(out['a'], out['c'])
     print(out)
-    print(fg.to_libdai())
 
 
 def test_paper():
@@ -179,7 +182,7 @@ def test_paper():
     fg.add_factor(('x3', 'x5'), fe)
     out = fg.marginalize()
     print(out)
-    #print(fg.to_libdai())
+    print(fg.to_libdai())
     
     
 if __name__ == '__main__':
