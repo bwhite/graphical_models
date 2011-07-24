@@ -12,6 +12,7 @@ class FactorGraph(object):
 
     def add_factor(self, names, potential):
         potential_fn = lambda **kw: potential[tuple([kw.get(x, Ellipsis) for x in names])]
+        potential_fn.potential = potential
         self.factors.append((tuple(names), potential_fn))
         
         for dim, name in enumerate(names):
@@ -24,6 +25,27 @@ class FactorGraph(object):
         for node, neighbors in self.unique_edges.items():
             out.append('%s--{%s}' % (node, ';'.join(neighbors)))
         return 'graph FG {%s}' % ';'.join(out)
+
+    def to_libdai(self):
+        out = '%d\n\n' % len(self.factors)
+        name_to_num = {}
+        cur_num = [0]
+        
+        def get_num(name):
+            try:
+                return name_to_num[name]
+            except KeyError:
+                name_to_num[name] = cur_num[0]
+                cur_num[0] += 1
+                return name_to_num[name]
+        for names, potential in self.factors:
+            out += '%s\n' % len(names)
+            out += '%s\n' % (' '.join([str(get_num(x)) for x in names]))
+            out += '%s\n' % (' '.join([str(len(self.variable_states[x])) for x in names]))
+            out += '%d\n' % potential.potential.size
+            out += ''.join(['%d %f\n' % (x, y) for x, y in enumerate(np.ravel(potential.potential, order='f'))])
+            out += '\n'
+        return out
 
     def joint(self, values):
         """
@@ -99,6 +121,7 @@ class FactorGraph(object):
                     for variable in set(var_names) - set([factor_parent[factor_ind]]):
                         msg_variable(factor_ind, variable)
                     inactive_factors.add(factor_ind)
+        msg_probs = dict([(x, y / np.sum(y)) for x, y in msg_probs.items()])
         return msg_probs
                 
 
@@ -111,13 +134,35 @@ def main():
     print(fg.marginalize())
 
 
+def test_single():
+    fg = FactorGraph()
+    fg.add_factor(('a',), np.array([.7, .3]))
+    out = fg.marginalize()
+    np.testing.assert_equal(out['a'], np.array([.7, .3]))
+
+    fg = FactorGraph()
+    fg.add_factor(('a',), np.array([.7, .3]) / 2)
+    out = fg.marginalize()
+    np.testing.assert_equal(out['a'], np.array([.7, .3]))
+
+    fg = FactorGraph()
+    fg.add_factor(('a',), np.array([.7, .3]) / 2)
+    fg.add_factor(('a',), np.array([.7, .3]) / 2)
+    out = fg.marginalize()
+    np.testing.assert_almost_equal(out['a'], np.array([0.84482759,  0.15517241]))
+ 
+
+
 def test_symmetric():
     fg = FactorGraph()
+    np.random.seed(232323)
     p = np.random.random((2, 2))
     fg.add_factor(('a', 'b'), p)
     fg.add_factor(('c', 'b'), p)
     out = fg.marginalize()
     np.testing.assert_equal(out['a'], out['c'])
+    print(out)
+    print(fg.to_libdai())
 
 
 def test_paper():
@@ -134,9 +179,11 @@ def test_paper():
     fg.add_factor(('x3', 'x5'), fe)
     out = fg.marginalize()
     print(out)
+    #print(fg.to_libdai())
     
     
 if __name__ == '__main__':
+    test_single()
     main()
     test_symmetric()
     print('Paper')
