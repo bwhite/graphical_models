@@ -1,5 +1,6 @@
 import numpy as np
 import itertools
+import collections
 
 
 class FactorGraph(object):
@@ -39,51 +40,66 @@ class FactorGraph(object):
 
     def marginalize(self):
         msg_probs = {}
-        factor_msgs, var_msgs = {}, {}
-        factor_parent, var_parent = {}, {}  # Parent is the first neighbor a node sends to
+        factor_msgs, var_msgs = collections.defaultdict(list), collections.defaultdict(set)
+        # Parent is the first neighbor a node sends to
+        factor_parent, var_parent = collections.defaultdict(lambda : None), collections.defaultdict(lambda : None)
+        active_vars = set(self.variable_to_factors.keys())
+        active_factors = set(range(len(self.factors)))
+        inactive_vars = set()
+        inactive_factors = set()
 
         def msg_factor(from_var, to_factor):
+            print('MSG Factor[%s, %s]' % (from_var, to_factor))
             try:
                 prob = msg_probs[from_var]
-                potential = lambda **kw: prob[kw[from_var]]
+                potential = lambda **kw: prob[kw.get(from_var, Ellipsis)]
             except KeyError:
                 potential = lambda **kw: 1.
-            factor_msgs.setdefault(to_factor, []).append(((from_var,), potential))
+            factor_msgs[to_factor].append(((from_var,), potential))
 
         def msg_variable(from_factor, to_var):
-            variables = [self.factors[from_factor]] + factor_msgs.get(from_factor, [])
+            print('MSG Variable[%s, %s]' % (from_factor, to_var))
+            variables = [self.factors[from_factor]] + factor_msgs[from_factor]
             unique_vars = set()
             for var_names, _ in variables:
                 unique_vars.update(var_names)
             unique_vars.discard(to_var)
             unique_vars = list(unique_vars)
             out = 0.
+            var_msgs[to_var].add(from_factor)
 
             for config in itertools.product(*[self.variable_states[x] for x in unique_vars]):
                 config = dict(zip(unique_vars, config))
-                out += np.prod([v(**config) for _, v in variables], axis=0)
+                prod = 1.
+                for _, v in variables:
+                    prod *= v(**config)
+                out += prod
             try:
                 msg_probs[to_var] *= out
             except KeyError:
                 msg_probs[to_var] = out
-
-        while 1:
+        while active_vars - inactive_vars or active_factors - inactive_factors:
             # Sent from variables to factors
-            for var_name, factors in self.variable_to_factors.items():
-                if len(factors) - len(var_msgs.set_default(var_name, {})) == 1:  # Only one factor node didn't sent
-                    var_parent[var_name] = set(factors) - set(var_msgs[var_name])
+            for var_name in active_vars - inactive_vars:
+                factors = self.variable_to_factors[var_name]
+                if len(factors) - len(var_msgs[var_name]) == 1 and var_name not in var_parent:
+                    var_parent[var_name] = list(set(factors) - var_msgs[var_name])[0]
                     msg_factor(var_name, var_parent[var_name])
-                elif len(factors) - len(var_msgs[var_name]) == 0:  # All factors sent
+                elif len(factors) == len(var_msgs[var_name]):
                     for factor in set(factors) - set([var_parent.get(var_name, None)]):
                         msg_factor(var_name, factor)
+                    inactive_vars.add(var_name)
             # Sent from factors to variables
-            for factor_ind, (var_names, factor) in enumerate(self.factors):
-                if len(var_names) - len(factor_msgs.set_default(factor_ind, {})) == 1:  # Only one variable node didn't sent
-                    factor_parent[factor_ind] = set(var_names) - set(factor_msgs[var_name])
+            for factor_ind in active_factors - inactive_factors:
+                var_names, factor = self.factors[factor_ind]
+                if len(var_names) - len(factor_msgs[factor_ind]) == 1 and factor_ind not in factor_parent:
+                    factor_parent[factor_ind] = list(set(var_names) - set([x[0][0] for x in factor_msgs[factor_ind]]))[0]
                     msg_variable(factor_ind, factor_parent[factor_ind])
-                elif len(var_names) - len(factor_msgs.set_default(factor_ind, {})) == 0:  # All variables sent
-                    for variable in set(var_names) - set([factor_parent.get(factor_ind, None)]):
+                elif len(var_names) == len(factor_msgs[factor_ind]):
+                    for variable in set(var_names) - set([factor_parent[factor_ind]]):
                         msg_variable(factor_ind, variable)
+                    inactive_factors.add(factor_ind)
+        return msg_probs
                 
 
 def main():
@@ -92,9 +108,36 @@ def main():
     fg.add_factor(('c', 'b'), np.array([[.3, .7], [.6, .2]]))
     #fg.add_factor(('a', 'b'), np.array([[.3, .7], [.6, .2]]))
     #print(fg.joint({'a': 1, 'b': 1, 'c': 0}))
-    fg.marginalize()
+    print(fg.marginalize())
+
+
+def test_symmetric():
+    fg = FactorGraph()
+    p = np.random.random((2, 2))
+    fg.add_factor(('a', 'b'), p)
+    fg.add_factor(('c', 'b'), p)
+    out = fg.marginalize()
+    np.testing.assert_equal(out['a'], out['c'])
+
+
+def test_paper():
+    fg = FactorGraph()
+    fa = np.random.random(2)
+    fb = np.random.random(2)
+    fc = np.random.random((2, 2, 2))
+    fd = np.random.random((2, 2))
+    fe = np.random.random((2, 2))
+    fg.add_factor(('x1',), fa)
+    fg.add_factor(('x2',), fb)
+    fg.add_factor(('x1', 'x2', 'x3'), fc)
+    fg.add_factor(('x3', 'x4'), fd)
+    fg.add_factor(('x3', 'x5'), fe)
+    out = fg.marginalize()
+    print(out)
     
     
 if __name__ == '__main__':
     main()
-
+    test_symmetric()
+    print('Paper')
+    test_paper()
