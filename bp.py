@@ -1,10 +1,11 @@
 import numpy as np
 
+
 class FactorGraph(object):
 
     def __init__(self):
-        self.variable_to_factors = {} # [name] = list of factor indeces
-        self.factors = [] #  list of (tuple_of_names, N-d numpy array for N names)
+        self.variable_to_factors = {}  # [name] = list of factor indeces
+        self.factors = []  # list of (tuple_of_names, N-d numpy array for N names)
 
     def add_factor(self, names, potential):
         self.factors.append((tuple(names), potential))
@@ -31,10 +32,9 @@ class FactorGraph(object):
             names, potential = self.factors[cur_ind]
             for node_name in names:
                 if node_name != parent:
-                    out.append(inner_var(cur_name=factor_ind, parent=cur_ind))
+                    out.append(inner_var(cur_name=node_name, parent=cur_ind))
             return sum_var(names.index(parent), potential) * np.prod(out)
-        inner(name)
-                
+        inner_var(name)
 
     def joint(self, values):
         """
@@ -48,6 +48,7 @@ class FactorGraph(object):
         for names, potential in self.factors:
             p *= potential[tuple([values[name] for name in names])]
         return p
+
 
 def sum_var(ind, potential):
     potential = potential.copy()
@@ -63,7 +64,7 @@ def main():
     fg.add_factor(('a', 'b'), np.array([[.3, .7], [.6, .2]]))
     fg.add_factor(('c', 'b'), np.array([[.3, .7], [.6, .2]]))
     #fg.add_factor(('a', 'b'), np.array([[.3, .7], [.6, .2]]))
-    print(fg.joint({'a': 1, 'b': 1, 'c': 0}))
+    #print(fg.joint({'a': 1, 'b': 1, 'c': 0}))
     
     
 if __name__ == '__main__':
