@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 import collections
+import time
 
 
 class FactorGraph(object):
@@ -180,14 +181,16 @@ def test_paper():
     fg.add_factor(('x1', 'x2', 'x3'), fc)
     fg.add_factor(('x3', 'x4'), fd)
     fg.add_factor(('x3', 'x5'), fe)
+    st = time.time()
     out = fg.marginalize()
+    print(time.time() - st)
     print(out)
     print(fg.to_libdai())
     
     
 if __name__ == '__main__':
-    test_single()
-    main()
-    test_symmetric()
-    print('Paper')
+    #test_single()
+    #main()
+    #test_symmetric()
+    #print('Paper')
     test_paper()
