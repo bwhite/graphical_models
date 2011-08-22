@@ -30,7 +30,7 @@ class FactorGraph(object):
     def to_libdai(self):
         out = '%d\n\n' % len(self.factors)
         self.name_to_num = {}
-        self.num_to_names = {}
+        self.num_to_name = {}
         cur_num = [0]
         
         def get_num(name):
