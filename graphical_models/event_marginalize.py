@@ -29,16 +29,18 @@ class FactorGraph(object):
 
     def to_libdai(self):
         out = '%d\n\n' % len(self.factors)
-        name_to_num = {}
+        self.name_to_num = {}
+        self.num_to_names = {}
         cur_num = [0]
         
         def get_num(name):
             try:
-                return name_to_num[name]
+                return self.name_to_num[name]
             except KeyError:
-                name_to_num[name] = cur_num[0]
+                self.name_to_num[name] = cur_num[0]
+                self.num_to_name[cur_num[0]] = name
                 cur_num[0] += 1
-                return name_to_num[name]
+                return self.name_to_num[name]
         for names, potential in self.factors:
             out += '%s\n' % len(names)
             out += '%s\n' % (' '.join([str(get_num(x)) for x in names]))
