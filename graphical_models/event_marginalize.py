@@ -27,7 +27,7 @@ class FactorGraph(object):
             out.append('%s--{%s}' % (node, ';'.join(neighbors)))
         return 'graph FG {%s}' % ';'.join(out)
 
-    def to_libdai(self):
+    def to_libdai2(self):
         out = '%d\n\n' % len(self.factors)
         self.name_to_num = {}
         self.num_to_name = {}
@@ -49,6 +49,19 @@ class FactorGraph(object):
             out += ''.join(['%d %f\n' % (x, y) for x, y in enumerate(np.ravel(potential.potential, order='f'))])
             out += '\n'
         return out
+
+    def to_libdai(self):
+        out = '%d\n\n' % len(self.factors)
+
+        for names, potential in self.factors:
+            out += '%s\n' % len(names)
+            out += '%s\n' % (' '.join([str(x) for x in names]))
+            out += '%s\n' % (' '.join([str(len(self.variable_states[x])) for x in names]))
+            out += '%d\n' % potential.potential.size
+            out += ''.join(['%d %f\n' % (x, y) for x, y in enumerate(np.ravel(potential.potential, order='f'))])
+            out += '\n'
+        return out
+
 
     def joint(self, values):
         """
